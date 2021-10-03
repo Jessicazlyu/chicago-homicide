@@ -1,0 +1,94 @@
+---
+title: "Chicago Homicide Distribution"
+author: "Zhuo Lyu (Jessica)"
+date: "08/02/2018"
+output: github_document
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+```{r load_packages,warning=FALSE,message=FALSE}
+library(viridis)
+library(tidyverse)
+library(ggplot2)
+library(tidycensus)
+library(sf)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+  
+```{r read}
+crimes_fil<-read.csv("/Users/jessicalyu/R_HARRIS/crimes_filtered.csv")
+dim(crimes_fil)
+```
+
+```{r filter}
+crimes_fil%>%
+  group_by(Year)%>%
+  count(Year)%>%
+  filter(Year>=2013 & Year<=2018)
+
+crimes_fil<-crimes_fil%>%
+  group_by(Year)%>%
+  filter(Year>=2016 & Year<=2018)
+dim(crimes_fil)
+```
+
+```{r convert}
+crimes_fil<- st_as_sf(crimes_fil,coords = c("Longitude", "Latitude"),crs = 4326,remove=FALSE)
+glimpse(crimes_fil)
+plot(crimes_fil["ID"])
+```
+```{r load_census}
+gdf<-st_read("/Users/jessicalyu/R_HARRIS/geo_export_de4e4434-d0da-4b22-97ae-b5d8724dd674.shp")
+dim(gdf)
+glimpse(gdf)
+gdf<-rename(gdf,"geoid"="geoid10")
+gdf<-select(gdf,geoid)
+```
+
+```{r spatial_join}
+gdf<-st_set_crs(gdf,4326)
+crimes_fil<-st_join(crimes_fil,gdf,join = st_within)
+glimpse(crimes_fil)
+```
+```{r aggregate}
+crimes_fil$geometry<- NULL
+crimes_agg<-crimes_fil%>%
+  group_by(geoid)%>%
+  count(geoid)
+glimpse(crimes_agg$n)
+
+crimes_gdf<-gdf%>%
+  left_join(crimes_agg,by = "geoid")
+
+crimes_gdf<-mutate(crimes_gdf,n=replace_na(crimes_gdf$n,0))
+glimpse(crimes_gdf)
+plot(crimes_gdf["n"])
+```
+```{r ggplot2}
+
+ggplot() +
+  geom_sf(data = crimes_gdf, aes(color =n,fill=n) )+
+  scale_color_viridis(discrete = FALSE,guide=FALSE ) +
+  scale_fill_viridis(discrete = FALSE,name="homicides",direction=1 ) +
+  theme_bw()+
+  theme_void() +
+  theme(
+    panel.grid = element_line(color = "transparent")) +
+  labs(
+    title = "Homicides in Chicago, 2016 to Present",
+    subtitle = "Data from the City of Chicago Data Portal"
+  )
+##potential problems:
+##viridis command doesn't provide us with a clear changingof color as well as a clear distinct of homicides between different districts.
+##I think the map might neglect the real population behind. A district with higher number of homicides could just has more population, then it has a lower homicide rate. Therefore, only consider the number of homicides is inappropriate for sovling problems.
+
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
